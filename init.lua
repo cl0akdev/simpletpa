@@ -1,23 +1,28 @@
 local pending = {}
 local EXPIRE = 60
 
-local function msg(player, text)
-  core.chat_send_player(player, text)
+local function msg(player_name, text)
+  core.chat_send_player(player_name, text)
 end
 
 core.register_chatcommand("tpa", {
   params = "<player>",
-  description = "Ask to teleport to someone",
-  func = function(me, target)
-    if target == "" then return false, "Usage: /tpa <player>" end
-    if me == target then return false, "You already are there." end
-    if not core.get_player_by_name(target) then
-      return false, "Player '"..target.."' not online."
+  description = "Request to teleport to another player",
+  func = function(player1, player2)
+    if player2 == "" then
+      return false, "Usage: /tpa <player>"
+    end
+    if player1 == player2 then
+      return false, "You can't teleport to yourself."
     end
 
-    pending[target] = { from = me, t = os.time() }
-    msg(me, "Request sent to "..target.." (expires in "..EXPIRE.."s).")
-    msg(target, me.." wants to teleport to you. /tpaccept or /tpdeny")
+    if not core.get_player_by_name(player2) then
+      return false, "Player '" .. player2 .. "' is not online."
+    end
+
+    pending[player2] = { from = player1, time = os.time() }
+    msg(player1, "Teleport request sent to " .. player2 .. " (expires in " .. EXPIRE .. "s).")
+    msg(player2, player1 .. " wants to teleport to you. Use /tpaccept or /tpdeny.")
     return true
   end,
 })
@@ -25,21 +30,34 @@ core.register_chatcommand("tpa", {
 core.register_chatcommand("tpaccept", {
   params = "",
   description = "Accept the last teleport request",
-  func = function(me)
-    local req = pending[me]
-    if not req then return false, "No pending requests." end
-    if os.time() - req.t > EXPIRE then pending[me] = nil; return false, "Request expired." end
+  func = function(player2)
+    local req = pending[player2]
+    if not req then
+      return false, "No pending requests."
+    end
 
-    local from = core.get_player_by_name(req.from)
-    local to = core.get_player_by_name(me)
-    if not from then pending[me] = nil; return false, req.from.." went offline." end
-    if not to then pending[me] = nil; return false, "You went offline." end
+    if os.time() - req.time > EXPIRE then
+      pending[player2] = nil
+      return false, "Request expired."
+    end
 
-    local p = to:get_pos()
-    from:set_pos({ x = p.x, y = p.y + 1, z = p.z })
-    msg(req.from, "Teleported to "..me..".")
-    msg(me, "You accepted "..req.from..".")
-    pending[me] = nil
+    local player1 = core.get_player_by_name(req.from)
+    local player2_obj = core.get_player_by_name(player2)
+    if not player1 then
+      pending[player2] = nil
+      return false, req.from .. " went offline."
+    end
+    if not player2_obj then
+      pending[player2] = nil
+      return false, "You went offline."
+    end
+
+    local pos = player2_obj:get_pos()
+    player1:set_pos({ x = pos.x, y = pos.y + 1, z = pos.z })
+
+    msg(req.from, "Teleported to " .. player2 .. ".")
+    msg(player2, "You accepted " .. req.from .. "'s request.")
+    pending[player2] = nil
     return true
   end,
 })
@@ -47,26 +65,33 @@ core.register_chatcommand("tpaccept", {
 core.register_chatcommand("tpdeny", {
   params = "",
   description = "Deny the last teleport request",
-  func = function(me)
-    local req = pending[me]
-    if not req then return false, "No pending requests." end
-    msg(req.from, me.." denied your request.")
-    msg(me, "Denied "..req.from..".")
-    pending[me] = nil
+  func = function(player2)
+    local req = pending[player2]
+    if not req then
+      return false, "No pending requests."
+    end
+
+    msg(req.from, player2 .. " denied your teleport request.")
+    msg(player2, "Denied " .. req.from .. ".")
+    pending[player2] = nil
     return true
   end,
 })
 
 core.register_on_leaveplayer(function(player)
-  local n = player:get_player_name()
-  for t, v in pairs(pending) do
-    if v.from == n then pending[t] = nil end
+  local name = player:get_player_name()
+  for target, info in pairs(pending) do
+    if info.from == name then
+      pending[target] = nil
+    end
   end
 end)
 
 core.register_globalstep(function()
   local now = os.time()
-  for t, v in pairs(pending) do
-    if now - v.t > EXPIRE then pending[t] = nil end
+  for target, info in pairs(pending) do
+    if now - info.time > EXPIRE then
+      pending[target] = nil
+    end
   end
 end)
