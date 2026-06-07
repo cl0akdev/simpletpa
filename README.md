@@ -18,4 +18,4 @@ Configuration
 - Edit `init.lua` to change request timeout (EXPIRE) or add cooldowns/permissions.
 
 Author
-Copyright (c) 2026 cloakdev All Rights Reserved.
+Copyright (c) 2026 cloakdev MIT
